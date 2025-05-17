@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Airplane Challenge</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB, #E0F7FA);
+            font-family: 'Arial', sans-serif;
+            touch-action: manipulation;
+        }
+        canvas {
+            display: block;
+        }
+        #gameUI {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-size: 24px;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 30px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+            display: none;
+        }
+        #restartBtn {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="gameUI">
+        <div>Score: <span id="score">0</span></div>
+        <div>High Score: <span id="highScore">0</span></div>
+    </div>
+    
+    <div id="gameOver">
+        <h1>Game Over!</h1>
+        <p>Your Score: <span id="finalScore">0</span></p>
+        <p>High Score: <span id="finalHighScore">0</span></p>
+        <button id="restartBtn">Play Again</button>
+    </div>
+
+    <div class="instructions">
+        Click or tap anywhere to make the plane ascend
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const highScoreElement = document.getElementById('highScore');
+        const finalScoreElement = document.getElementById('finalScore');
+        const finalHighScoreElement = document.getElementById('finalHighScore');
+        const gameOverDiv = document.getElementById('gameOver');
+        const restartBtn = document.getElementById('restartBtn');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let score = 0;
+        let highScore = localStorage.getItem('planeHighScore') || 0;
+        let gameRunning = true;
+        let animationId;
+        let frameCount = 0;
+
+        const plane = {
+            x: 100,
+            y: canvas.height / 2,
+            width: 80,
+            height: 60,
+            speedY: 0,
+            gravity: 0.4,
+            lift: -8,
+            angle: 0,
+            propellerRotation: 0
+        };
+
+        let clouds = [];
+        for (let i = 0; i < 8; i++) {
+            clouds.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                speed: 1 + Math.random() * 3,
+                size: 40 + Math.random() * 60
+            });
+        }
+
+        let obstacles = [];
+        const obstacleWidth = 80;
+        const minGapHeight = 200;
+        let obstacleSpeed = 5;
+        let obstacleFrequency = 120;
+
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawBackground();
+            
+            updatePlane();
+            drawPlane();
+            
+            updateObstacles();
+            drawObstacles();
+            
+            checkCollisions();
+            
+            score++;
+            scoreElement.textContent = Math.floor(score / 10);
+            highScoreElement.textContent = highScore;
+            
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        function drawBackground() {
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            skyGradient.addColorStop(0, '#87CEEB');
+            skyGradient.addColorStop(1, '#E0F7FA');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            for (let i = 0; i < clouds.length; i++) {
+                const cloud = clouds[i];
+                
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, cloud.size/2, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.size/3, cloud.y - cloud.size/4, cloud.size/2.5, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.size/1.5, cloud.y, cloud.size/3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                cloud.x -= cloud.speed;
+                if (cloud.x < -cloud.size * 2) {
+                    cloud.x = canvas.width + cloud.size;
+                    cloud.y = Math.random() * canvas.height;
+                }
+            }
+        }
+
+        function updatePlane() {
+            plane.speedY += plane.gravity;
+            plane.y += plane.speedY;
+            
+            plane.angle = plane.speedY * 0.5;
+            
+            plane.propellerRotation += 20;
+            
+            if (plane.y < 0) {
+                plane.y = 0;
+                plane.speedY = 0;
+            }
+            if (plane.y > canvas.height - plane.height) {
+                gameOver();
+            }
+        }
+
+        function drawPlane() {
+            ctx.save();
+            ctx.translate(plane.x + plane.width/2, plane.y + plane.height/2);
+            ctx.rotate(plane.angle * Math.PI / 180);
+            
+            ctx.fillStyle = '#E74C3C';
+            ctx.beginPath();
+            ctx.moveTo(-plane.width/2, 0);
+            ctx.lineTo(plane.width/2, -plane.height/4);
+            ctx.lineTo(plane.width/2, plane.height/4);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.fillStyle = '#C0392B';
+            ctx.fillRect(-plane.width/2, -plane.height/3, 15, plane.height/2);
+            
+            ctx.fillStyle = '#2980B9';
+            ctx.fillRect(-10, -5, plane.width, 10);
+            
+            ctx.save();
+            ctx.translate(20, 0);
+            ctx.rotate(plane.propellerRotation * Math.PI / 180);
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-15, -2, 30, 4);
+            ctx.restore();
+            
+            ctx.fillStyle = '#3498DB';
+            for (let i = 0; i < 3; i++) {
+                ctx.fillRect(
+                    -plane.width/2 + 30 + i * 20,
+                    -8,
+                    10,
+                    16
+                );
+            }
+            
+            ctx.restore();
+        }
+
+        function createObstacle() {
+            const gapY = Math.random() * (canvas.height - minGapHeight - 200) + 100;
+            const gapHeight = minGapHeight - Math.min(50, score/1000); // Gets harder
+            
+            obstacles.push({
+                x: canvas.width,
+                topHeight: gapY,
+                bottomY: gapY + gapHeight,
+                passed: false
+            });
+        }
+
+        function updateObstacles() {
+            if (frameCount % obstacleFrequency === 0) {
+                createObstacle();
+                
+                if (obstacleFrequency > 80) obstacleFrequency -= 1;
+                if (obstacleSpeed < 8) obstacleSpeed += 0.02;
+            }
+            
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].x -= obstacleSpeed;
+                
+                if (obstacles[i].x + obstacleWidth < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+            
+            frameCount++;
+        }
+
+        function drawObstacles() {
+            ctx.fillStyle = '#34495E';
+            for (const obstacle of obstacles) {
+                ctx.fillRect(obstacle.x, 0, obstacleWidth, obstacle.topHeight);
+                
+                ctx.fillRect(
+                    obstacle.x, 
+                    obstacle.bottomY, 
+                    obstacleWidth, 
+                    canvas.height - obstacle.bottomY
+                );
+                
+                ctx.fillStyle = '#2C3E50';
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect(
+                        obstacle.x + 10,
+                        20 + i * 30,
+                        obstacleWidth - 20,
+                        15
+                    );
+                    
+                    ctx.fillRect(
+                        obstacle.x + 10,
+                        obstacle.bottomY + 20 + i * 30,
+                        obstacleWidth - 20,
+                        15
+                    );
+                }
+                ctx.fillStyle = '#34495E';
+            }
+        }
+
+        function checkCollisions() {
+            for (const obstacle of obstacles) {
+                if (
+                    plane.x + plane.width > obstacle.x && 
+                    plane.x < obstacle.x + obstacleWidth && 
+                    (plane.y < obstacle.topHeight || 
+                     plane.y + plane.height > obstacle.bottomY)
+                ) {
+                    gameOver();
+                    break;
+                }
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            cancelAnimationFrame(animationId);
+            
+            
+            const currentScore = Math.floor(score / 10);
+            if (currentScore > highScore) {
+                highScore = currentScore;
+                localStorage.setItem('planeHighScore', highScore);
+            }
+            
+            finalScoreElement.textContent = currentScore;
+            finalHighScoreElement.textContent = highScore;
+            gameOverDiv.style.display = 'block';
+        }
+
+        function resetGame() {
+            score = 0;
+            frameCount = 0;
+            obstacles = [];
+            plane.y = canvas.height / 2;
+            plane.speedY = 0;
+            obstacleSpeed = 5;
+            obstacleFrequency = 120;
+            gameRunning = true;
+            gameOverDiv.style.display = 'none';
+            gameLoop();
+        }
+
+        
+        function handleInput() {
+            if (gameRunning) {
+                plane.speedY = plane.lift;
+                
+                
+                plane.width = 75;
+                setTimeout(() => { plane.width = 80; }, 100);
+            }
+        }
+
+        canvas.addEventListener('click', handleInput);
+        canvas.addEventListener('touchstart', handleInput);
+        
+        restartBtn.addEventListener('click', resetGame);
+
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            plane.y = canvas.height / 2;
+        });
+
+        highScoreElement.textContent = highScore;
+        gameLoop();
+    </script>
+</body>
+</html>
